@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f0f11">
+    <title>Artist Grid Studio | Glass</title>
+    
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- MODERN GLASS THEME VARIABLES --- */
+        :root {
+            --bg-dark: #050505;
+            /* Glass Variables */
+            --glass-panel: rgba(20, 20, 23, 0.65);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-blur: blur(20px);
+            
+            --bg-input: rgba(255, 255, 255, 0.05);
+            --bg-hover: rgba(255, 255, 255, 0.1);
+            
+            --accent: #4f8aff;
+            --accent-dim: rgba(79, 138, 255, 0.2);
+            --accent-hover: #3b76e6;
+            
+            --text-main: #ffffff;
+            --text-muted: #a0a0a5;
+            
+            --radius-sm: 10px;
+            --radius-md: 18px;
+            
+            --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            
+            --font-sans: 'Inter', -apple-system, sans-serif;
+            --nav-width: 340px;
+        }
+
+        * { 
+            box-sizing: border-box; 
+            outline: none; 
+            -webkit-tap-highlight-color: transparent; 
+        }
+        
+        body {
+            margin: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            overflow: hidden;
+            user-select: none;
+            /* Critical for custom gestures */
+            touch-action: none; 
+        }
+
+        /* --- LAYOUT --- */
+        #app {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        /* --- VIEWPORT --- */
+        #viewport {
+            flex: 1;
+            position: relative;
+            background: 
+                radial-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                var(--bg-dark);
+            background-size: 30px 30px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            z-index: 1;
+            touch-action: none; /* Prevents browser scroll on mobile */
+        }
+
+        #viewport.grabbing { cursor: grabbing; }
+
+        .canvas-wrapper {
+            position: absolute;
+            box-shadow: 0 50px 100px rgba(0,0,0,0.7);
+            transform-origin: 0 0; 
+            background: white;
+            pointer-events: none;
+            will-change: transform;
+            display: none;
+        }
+        
+        .canvas-wrapper.active { display: block; }
+        
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+
+        /* --- CROP EDITOR OVERLAY --- */
+        #cropEditor {
+            position: fixed; inset: 0;
+            background: #000;
+            z-index: 300;
+            display: none;
+            flex-direction: column;
+        }
+        #cropEditor.active { display: flex; }
+
+        .crop-toolbar {
+            height: 70px; padding: 0 20px;
+            display: flex; align-items: center; justify-content: space-between;
+            background: var(--glass-panel);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-bottom: 1px solid var(--glass-border);
+            z-index: 10;
+        }
+
+        .crop-workspace {
+            flex: 1; position: relative; overflow: hidden;
+            cursor: move;
+            background: #111;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none;
+        }
+
+        .crop-paper-area {
+            position: relative;
+            background: rgba(255,255,255,0.05);
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.85); 
+            border: 2px solid var(--accent);
+            pointer-events: none; 
+        }
+
+        .crop-image-container {
+            position: absolute;
+            transform-origin: 0 0;
+            will-change: transform;
+        }
+
+        /* --- WELCOME SCREEN --- */
+        #welcomeScreen {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--text-muted);
+            border: 1px dashed rgba(255,255,255,0.2);
+            padding: 60px 40px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--glass-panel);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            z-index: 10;
+            max-width: 400px; width: 90%;
+        }
+        
+        #welcomeScreen:hover {
+            border-color: var(--accent);
+            background: rgba(79, 138, 255, 0.1);
+            color: var(--text-main);
+            transform: translate(-50%, -52%);
+        }
+        
+        #welcomeScreen i { font-size: 3.5rem; margin-bottom: 20px; color: var(--accent); }
+        #welcomeScreen h2 { margin: 0 0 8px 0; font-size: 1.5rem; color: var(--text-main); font-weight: 600; }
+        #welcomeScreen p { margin: 0; font-size: 0.95rem; line-height: 1.5; }
+
+        /* --- GLASS SIDEBAR --- */
+        #sidebar {
+            width: var(--nav-width);
+            background: var(--glass-panel);
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+            border-left: 1px solid var(--glass-border);
+            display: flex;
+            flex-direction: column;
+            z-index: 50;
+            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+            position: absolute;
+            right: 0; top: 0; bottom: 0;
+            box-shadow: var(--shadow-glass);
+        }
+
+        /* Desktop: Collapsed state moves right */
+        #sidebar.collapsed { transform: translateX(110%); }
+
+        .header {
+            padding: 24px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo { 
+            font-weight: 700; font-size: 1.2rem; letter-spacing: -0.5px; 
+            display: flex; gap: 10px; align-items: center; color: white;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .logo i { color: var(--accent); font-size: 1.4rem; }
+
+        .scroll-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.2) transparent;
+        }
+
+        .scroll-area::-webkit-scrollbar { width: 6px; }
+        .scroll-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        .scroll-area::-webkit-scrollbar-track { background: transparent; }
+
+        .control-group { 
+            margin-bottom: 30px; 
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .control-group:last-child { border-bottom: none; margin-bottom: 80px; }
+
+        .group-header {
+            font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.2px;
+            color: var(--text-muted); font-weight: 700; margin-bottom: 16px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* --- INPUTS & CONTROLS --- */
+        .row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+
+        select, input[type="number"], input[type="text"] {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--glass-border);
+            color: var(--text-main);
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            font-family: var(--font-sans);
+            transition: 0.2s;
+            appearance: none;
+        }
+        
+        select {
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 16px;
+        }
+
+        select:focus, input:focus { border-color: var(--accent); background: var(--bg-hover); }
+
+        /* Upload Box */
+        .upload-box {
+            border: 2px dashed var(--glass-border);
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.2s;
+            background: rgba(255,255,255,0.02);
+        }
+        .upload-box:hover { border-color: var(--accent); background: var(--accent-dim); }
+        .upload-box i { font-size: 24px; color: var(--text-muted); margin-bottom: 8px; }
+        .upload-box p { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+
+        .file-name-display {
+            font-size: 0.8rem; color: var(--accent); margin-top: 10px;
+            text-align: center; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; display: none; background: var(--accent-dim);
+            padding: 6px; border-radius: 4px;
+        }
+        .file-name-display.active { display: block; }
+
+        /* History List */
+        .history-list {
+            display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px;
+            scrollbar-width: none;
+            margin-top: 10px;
+        }
+        .history-list::-webkit-scrollbar { display: none; }
+        
+        .history-item {
+            min-width: 70px; width: 70px;
+            display: flex; flex-direction: column; gap: 6px;
+            cursor: pointer; position: relative;
+        }
+        .history-thumb {
+            width: 70px; height: 70px;
+            background: #222; border-radius: 12px; border: 1px solid var(--glass-border);
+            object-fit: cover; transition: 0.2s;
+        }
+        .history-item:hover .history-thumb { border-color: var(--accent); opacity: 0.8; }
+        .history-name { font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+        .history-del {
+            position: absolute; top: -4px; right: -4px;
+            background: #ff4d4d; color: white;
+            border-radius: 50%; padding: 4px; font-size: 0.7rem;
+            display: none; z-index: 2; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .history-item:hover .history-del { display: block; }
+
+
+        /* Custom Range Sliders */
+        .slider-container { margin-bottom: 20px; }
+        .slider-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.85rem; font-weight: 500;}
+        
+        input[type=range] {
+            width: 100%;
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]:focus { outline: none; }
+        
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 6px; cursor: pointer;
+            background: var(--bg-input); border-radius: 10px; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 18px; width: 18px; border-radius: 50%;
+            background: var(--accent); cursor: pointer;
+            -webkit-appearance: none; margin-top: -6px;
+            box-shadow: 0 0 10px rgba(79, 138, 255, 0.5);
+            border: 2px solid #fff;
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%; padding: 14px; border: none;
+            border-radius: var(--radius-sm);
+            font-weight: 600; font-size: 0.95rem; font-family: var(--font-sans);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            gap: 10px; transition: 0.2s;
+        }
+        .btn-primary { background: var(--accent); color: white; box-shadow: 0 4px 15px rgba(79, 138, 255, 0.4); }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn-secondary { background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: var(--text-main); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
+
+        /* Toggles & Color Picker */
+        .toggle-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px; margin-bottom: 8px; cursor: pointer;
+            border-radius: var(--radius-sm); background: var(--bg-input); border: 1px solid transparent;
+            transition: 0.2s;
+        }
+        .toggle-row:hover { border-color: var(--glass-border); background: var(--bg-hover); }
+        .toggle-label { font-size: 0.9rem; font-weight: 500; }
+
+        .color-picker-wrapper {
+            position: relative; height: 42px; width: 100%;
+            border-radius: var(--radius-sm); overflow: hidden;
+            border: 1px solid var(--glass-border);
+        }
+        input[type="color"] {
+            position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+            cursor: pointer; border: none; padding: 0;
+        }
+
+        /* --- FLOATING TOOLBAR (Glass) --- */
+        .floating-bar {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: var(--glass-panel);
+            backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border);
+            border-radius: 100px; padding: 8px 16px; display: flex; gap: 12px; align-items: center;
+            box-shadow: var(--shadow-glass); 
+            z-index: 60; 
+            transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+        .floating-bar.hidden { opacity: 0; pointer-events: none; transform: translate(-50%, 40px); }
+
+        .tool-btn {
+            background: transparent; border: none; color: var(--text-main);
+            width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem; transition: 0.2s;
+        }
+        .tool-btn:hover { background: rgba(255,255,255,0.15); color: white; }
+        .tool-btn.active { color: var(--accent); background: var(--accent-dim); }
+        
+        .tool-divider { width: 1px; height: 24px; background: rgba(255,255,255,0.2); }
+        .zoom-display { font-size: 0.9rem; font-weight: 600; min-width: 50px; text-align: center; font-variant-numeric: tabular-nums; }
+
+        /* Mobile Close Button */
+        #mobileCloseBtn {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255,255,255,0.1); color: white;
+            width: 40px; height: 40px; border-radius: 50%; border: none;
+            display: none; align-items: center; justify-content: center;
+            font-size: 1.2rem; cursor: pointer; z-index: 100;
+        }
+
+        /* --- OVERLAYS --- */
+        #calibrationBox {
+            position: absolute; width: 189px; height: 189px;
+            border: 2px solid #ff4d4d; background: rgba(255, 77, 77, 0.1);
+            z-index: 100; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            display: none; pointer-events: none; align-items: center; justify-content: center;
+        }
+        #calibrationBox span {
+            background: #ff4d4d; color: white; padding: 4px 8px;
+            border-radius: 4px; font-weight: 600; font-size: 0.8rem;
+        }
+
+        #dropOverlay {
+            position: fixed; inset: 0; background: rgba(79, 138, 255, 0.6);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            z-index: 200; display: none; align-items: center; justify-content: center;
+            flex-direction: column; color: white; font-weight: 600; pointer-events: none;
+        }
+        #dropOverlay.active { display: flex; }
+        #dropOverlay i { font-size: 5rem; margin-bottom: 20px; }
+
+        /* --- RESPONSIVE --- */
+        @media (max-width: 900px) {
+            #sidebar {
+                width: 100%; max-width: 320px;
+                transform: translateX(100%);
+                right: 0;
+            }
+            #sidebar.active { transform: translateX(0); }
+            
+            #mobileCloseBtn { display: flex; }
+            .header { padding-right: 70px; }
+            
+            .floating-bar { 
+                bottom: 20px; padding: 8px 12px; width: 90%; justify-content: space-between; 
+            }
+            .tool-btn { width: 40px; height: 40px; font-size: 1.2rem; }
+            .crop-toolbar { height: 60px; padding: 0 10px; }
+            .crop-toolbar h3 { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="dropOverlay">
+        <i class="ph-fill ph-file-arrow-up"></i>
+        <span>Drop Image Here</span>
+    </div>
+
+    <div id="calibrationBox">
+        <span>50mm (5cm)</span>
+    </div>
+
+    <div id="cropEditor">
+        <div class="crop-toolbar">
+            <button class="btn btn-secondary" id="btnCancelCrop" style="width:auto">Cancel</button>
+            <h3 style="margin:0; font-size:1rem; color:white">Position & Crop</h3>
+            <button class="btn btn-primary" id="btnApplyCrop" style="width:auto">Apply Crop</button>
+        </div>
+        <div class="crop-workspace" id="cropWorkspace">
+            <div style="position:relative;">
+                <div class="crop-image-container" id="cropImgContainer">
+                    <img id="cropTargetImg" style="display:block; max-width:none; pointer-events:none;">
+                </div>
+                <div class="crop-paper-area" id="cropPaperArea"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="app">
+        <div id="viewport">
+            
+            <div id="welcomeScreen">
+                <i class="ph-duotone ph-image-square"></i>
+                <h2>Start Project</h2>
+                <p>Click to select a reference photo<br>or drag & drop here</p>
+            </div>
+
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <canvas id="canvasImage"></canvas>
+                <canvas id="canvasGrid"></canvas>
+            </div>
+
+            <div class="floating-bar" id="floatingBar">
+                <button class="tool-btn" id="btn100" title="Actual Size (1:1)"><i class="ph ph-corners-out"></i></button>
+                <div class="tool-divider"></div>
+                <button class="tool-btn" id="btnZoomOut"><i class="ph ph-minus"></i></button>
+                <span class="zoom-display" id="zoomVal">100%</span>
+                <button class="tool-btn" id="btnZoomIn"><i class="ph ph-plus"></i></button>
+                <div class="tool-divider"></div>
+                <button class="tool-btn" id="btnToggleSidebar" title="Settings"><i class="ph-fill ph-sliders-horizontal"></i></button>
+            </div>
+        </div>
+
+        <div id="sidebar" class="collapsed">
+            <button id="mobileCloseBtn"><i class="ph-bold ph-x"></i></button>
+            
+            <div class="header">
+                <div class="logo"><i class="ph-fill ph-grid-four"></i> Artist Grid Pro</div>
+            </div>
+
+            <div class="scroll-area">
+                
+                <div class="control-group">
+                    <div class="group-header">Recent Projects</div>
+                    <div class="history-list" id="historyList">
+                        </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="group-header">Canvas Setup</div>
+                    <div class="row">
+                        <select id="selPaperSize">
+                            <option value="A5">A5 (148 x 210 mm)</option>
+                            <option value="A4" selected>A4 (210 x 297 mm)</option>
+                            <option value="A3">A3 (297 x 420 mm)</option>
+                            <option value="A2">A2 (420 x 594 mm)</option>
+                            <option value="A1">A1 (594 x 841 mm)</option>
+                            <option value="Custom">Custom Size</option>
+                        </select>
+                        <button class="btn btn-secondary" style="width: auto; padding: 0 14px;" id="btnOrientation" title="Rotate Paper">
+                            <i class="ph-bold ph-arrows-clockwise"></i>
+                        </button>
+                    </div>
+                    <div class="row" id="customSizeRow" style="display: none;">
+                        <input type="number" id="inpCustW" placeholder="Width (mm)" min="10" max="5000">
+                        <input type="number" id="inpCustH" placeholder="Height (mm)" min="10" max="5000">
+                    </div>
+                    
+                    <label style="font-size:0.7rem; color:var(--text-muted); display:block; margin: 15px 0 5px 0">Image Placement</label>
+                    <div class="row">
+                        <button class="btn btn-secondary" id="btnFitPaper" title="Fit whole image inside">
+                            <i class="ph-bold ph-arrows-in"></i> Fit to Paper
+                        </button>
+                        <button class="btn btn-secondary" id="btnOpenCrop" title="Crop & Zoom">
+                            <i class="ph-bold ph-crop"></i> Crop / Fill
+                        </button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="group-header">Image Source</div>
+                    <input type="file" id="fileInput" accept="image/*" hidden>
+                    <div class="upload-box" id="uploadBox">
+                        <i class="ph ph-upload-simple"></i>
+                        <p>Change Image</p>
+                    </div>
+                    <div class="file-name-display" id="fileNameDisplay"></div>
+                </div>
+
+                <div class="control-group">
+                    <div class="group-header">
+                        <span>Adjustments</span>
+                        <i class="ph-bold ph-arrow-counter-clockwise" style="cursor:pointer; font-size:1.1rem" id="resetFilters" title="Reset"></i>
+                    </div>
+                    
+                    <div class="toggle-row" id="togBw">
+                        <span class="toggle-label"><i class="ph-fill ph-circle-half" style="margin-right:8px; vertical-align:middle"></i> Black & White</span>
+                        <i class="ph ph-toggle-left" id="iconBw" style="font-size: 1.6rem; color: #666;"></i>
+                    </div>
+
+                    <div class="slider-container" style="margin-top:20px">
+                        <div class="slider-header"><span>Brightness</span><span id="valBright" style="color:var(--accent)">100%</span></div>
+                        <input type="range" id="rngBright" min="0" max="200" value="100">
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-header"><span>Contrast</span><span id="valContrast" style="color:var(--accent)">100%</span></div>
+                        <input type="range" id="rngContrast" min="0" max="200" value="100">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="group-header">Grid Settings</div>
+                    <div class="row">
+                        <div style="flex:1">
+                            <label style="font-size:0.7rem; color:var(--text-muted); display:block; margin-bottom:4px">Size (cm)</label>
+                            <input type="number" id="inpGridSize" value="2" step="0.5" min="0.5" max="50">
+                        </div>
+                        <div style="flex:1">
+                            <label style="font-size:0.7rem; color:var(--text-muted); display:block; margin-bottom:4px">Thickness</label>
+                            <input type="number" id="inpThickness" value="1" step="0.5" min="0.5" max="10">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div style="flex:1">
+                            <label style="font-size:0.7rem; color:var(--text-muted); display:block; margin-bottom:4px">Color</label>
+                            <div class="color-picker-wrapper">
+                                <input type="color" id="inpColor" value="#4f8aff">
+                            </div>
+                        </div>
+                        <div style="flex:1">
+                            <label style="font-size:0.7rem; color:var(--text-muted); display:block; margin-bottom:4px">Opacity %</label>
+                            <input type="number" id="inpOpacity" value="100" min="0" max="100">
+                        </div>
+                    </div>
+                    
+                    <div class="toggle-row" id="togLabels" style="margin-top:12px">
+                        <span class="toggle-label">A1, B2 Labels</span>
+                        <i class="ph-fill ph-check-circle" id="iconLabels" style="color:var(--accent); font-size:1.2rem"></i>
+                    </div>
+                    <div class="toggle-row" id="togDiagonals">
+                        <span class="toggle-label">Diagonal Lines (X)</span>
+                        <i class="ph-fill ph-circle" id="iconDiagonals" style="color:#666; font-size:1.2rem"></i>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="group-header">Screen Calibration (PPI)</div>
+                    <div class="row">
+                        <input type="number" id="inpPPI" value="96" min="10" max="500">
+                        <button class="btn btn-secondary" style="width:auto" id="btnAutoPPI">Auto</button>
+                    </div>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin-top:8px; line-height:1.4; background:rgba(255,255,255,0.03); padding:10px; border-radius:6px;">
+                        <i class="ph-bold ph-ruler" style="vertical-align:middle; margin-right:4px"></i>
+                        Hold a real ruler to the screen. Adjust PPI until the red box matches <strong>5 cm</strong> exactly.
+                    </p>
+                </div>
+
+                <div class="control-group" style="margin-top:auto">
+                    <button class="btn btn-primary" id="btnDownload">
+                        <i class="ph-bold ph-download-simple"></i> Download Grid Image
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const PAPERS = {
+            'A5': [148, 210], 'A4': [210, 297], 'A3': [297, 420],
+            'A2': [420, 594], 'A1': [594, 841]
+        };
+
+        // --- IndexedDB with Settings Persistence ---
+        const DB_NAME = 'ArtistGridDB_v2';
+        const DB_STORE = 'projects';
+        
+        class ImageDB {
+            constructor(onUpdate) {
+                this.db = null;
+                this.onUpdate = onUpdate;
+                this.init();
+            }
+            init() {
+                const req = indexedDB.open(DB_NAME, 2);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if(!db.objectStoreNames.contains(DB_STORE)) {
+                        db.createObjectStore(DB_STORE, { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = (e) => {
+                    this.db = e.target.result;
+                    this.loadHistory();
+                };
+            }
+            // Now saves the 'state' object too
+            save(file, state) {
+                if(!this.db) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const tx = this.db.transaction(DB_STORE, 'readwrite');
+                    const store = tx.objectStore(DB_STORE);
+                    
+                    // Create a safe copy of state without the huge Image object
+                    const safeState = JSON.parse(JSON.stringify(state));
+                    delete safeState.img; // Don't store the img object in JSON
+
+                    const item = {
+                        id: Date.now().toString(),
+                        name: file.name,
+                        data: e.target.result, // The image base64
+                        state: safeState,
+                        date: new Date()
+                    };
+                    store.put(item);
+                    tx.oncomplete = () => this.loadHistory();
+                };
+                reader.readAsDataURL(file);
+            }
+            loadHistory() {
+                if(!this.db) return;
+                const tx = this.db.transaction(DB_STORE, 'readonly');
+                const store = tx.objectStore(DB_STORE);
+                const req = store.getAll();
+                req.onsuccess = () => {
+                    const items = req.result.sort((a,b) => b.id - a.id).slice(0, 8); 
+                    this.onUpdate(items);
+                };
+            }
+            delete(id) {
+                if(!this.db) return;
+                const tx = this.db.transaction(DB_STORE, 'readwrite');
+                tx.objectStore(DB_STORE).delete(id);
+                tx.oncomplete = () => this.loadHistory();
+            }
+        }
+
+        class ArtistGridApp {
+            constructor() {
+                this.els = {
+                    file: document.getElementById('fileInput'),
+                    viewport: document.getElementById('viewport'),
+                    wrapper: document.getElementById('canvasWrapper'),
+                    welcome: document.getElementById('welcomeScreen'),
+                    cImage: document.getElementById('canvasImage'),
+                    cGrid: document.getElementById('canvasGrid'),
+                    dropOverlay: document.getElementById('dropOverlay'),
+                    calBox: document.getElementById('calibrationBox'),
+                    sidebar: document.getElementById('sidebar'),
+                    floatingBar: document.getElementById('floatingBar'),
+                    mobileCloseBtn: document.getElementById('mobileCloseBtn'),
+                    fileName: document.getElementById('fileNameDisplay'),
+                    uploadBox: document.getElementById('uploadBox'),
+                    selPaperSize: document.getElementById('selPaperSize'),
+                    customRow: document.getElementById('customSizeRow'),
+                    inpCustW: document.getElementById('inpCustW'),
+                    inpCustH: document.getElementById('inpCustH'),
+                    zoomVal: document.getElementById('zoomVal'),
+                    iconBw: document.getElementById('iconBw'),
+                    iconLabels: document.getElementById('iconLabels'),
+                    iconDiagonals: document.getElementById('iconDiagonals'),
+                    historyList: document.getElementById('historyList'),
+                    cropEditor: document.getElementById('cropEditor'),
+                    cropImg: document.getElementById('cropTargetImg'),
+                    cropImgContainer: document.getElementById('cropImgContainer'),
+                    cropWorkspace: document.getElementById('cropWorkspace'),
+                    cropPaperArea: document.getElementById('cropPaperArea')
+                };
+
+                this.ctxImg = this.els.cImage.getContext('2d', { willReadFrequently: true });
+                this.ctxGrid = this.els.cGrid.getContext('2d', { willReadFrequently: true });
+
+                this.state = {
+                    scale: 1, panX: 0, panY: 0, isDirty: false, animationId: null,
+                    paper: 'A4', isPortrait: true, custW: 210, custH: 297,
+                    img: null,
+                    crop: { x: 0, y: 0, scale: 1 }, 
+                    filters: { brightness: 100, contrast: 100, grayscale: false },
+                    grid: { size: 2, color: '#4f8aff', opacity: 1, labels: true, diagonals: false, thickness: 1 },
+                    ppi: 96
+                };
+
+                this.pointers = [];
+                this.prevDiff = -1;
+                this.pinchCenter = { x: 0, y: 0 };
+                this.cropPointers = [];
+                this.cropPrevDiff = -1;
+                this.editCrop = { x: 0, y: 0, scale: 1 };
+
+                this.db = new ImageDB(this.renderHistory.bind(this));
+                this.init();
+            }
+
+            init() {
+                this.loadGlobalSettings();
+                this.bindEvents();
+                if(window.innerWidth > 900) this.els.sidebar.classList.add('collapsed');
+                this.updateCanvasDimensions(false);
+                this.startRenderLoop();
+            }
+
+            loadGlobalSettings() {
+                try {
+                    const saved = localStorage.getItem('ags_settings_v5');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        this.state.ppi = this.clamp(parsed.ppi || 96, 10, 500);
+                        document.getElementById('inpPPI').value = this.state.ppi;
+                    }
+                } catch(e) {}
+            }
+
+            saveGlobalSettings() {
+                try {
+                    localStorage.setItem('ags_settings_v5', JSON.stringify({ ppi: this.state.ppi }));
+                } catch(e) {}
+            }
+
+            startRenderLoop() {
+                const loop = () => {
+                    if (this.state.isDirty) {
+                        this.renderImage();
+                        this.drawGrid();
+                        this.state.isDirty = false;
+                    }
+                    this.state.animationId = requestAnimationFrame(loop);
+                };
+                loop();
+            }
+
+            requestRender() { this.state.isDirty = true; }
+            clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+            bindEvents() {
+                const vp = this.els.viewport;
+                // Important: Binding Pointer Events for unified Mobile/Desktop touch
+                vp.addEventListener('pointerdown', this.onPointerDown.bind(this));
+                vp.addEventListener('pointermove', this.onPointerMove.bind(this));
+                vp.addEventListener('pointerup', this.onPointerUp.bind(this));
+                vp.addEventListener('pointercancel', this.onPointerUp.bind(this));
+                vp.addEventListener('pointerleave', this.onPointerUp.bind(this));
+                vp.addEventListener('wheel', this.onWheel.bind(this), { passive: false });
+
+                const cw = this.els.cropWorkspace;
+                cw.addEventListener('pointerdown', this.onCropPointerDown.bind(this));
+                cw.addEventListener('pointermove', this.onCropPointerMove.bind(this));
+                cw.addEventListener('pointerup', this.onCropPointerUp.bind(this));
+                cw.addEventListener('pointercancel', this.onCropPointerUp.bind(this));
+                cw.addEventListener('wheel', this.onCropWheel.bind(this), { passive: false });
+
+                const bind = (id, evt, cb) => {
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener(evt, cb);
+                };
+
+                bind('btnToggleSidebar', 'click', () => this.toggleSidebar());
+                this.els.mobileCloseBtn.addEventListener('click', () => this.toggleSidebar());
+
+                bind('selPaperSize', 'change', (e) => {
+                    this.state.paper = e.target.value;
+                    if(this.state.paper === 'Custom') {
+                        this.els.customRow.style.display = 'flex';
+                        this.els.inpCustW.value = this.state.custW;
+                        this.els.inpCustH.value = this.state.custH;
+                    } else {
+                        this.els.customRow.style.display = 'none';
+                    }
+                    this.updateCanvasDimensions();
+                    this.fitImageToPaper();
+                });
+                
+                bind('btnOrientation', 'click', () => { 
+                    this.state.isPortrait = !this.state.isPortrait; 
+                    this.updateCanvasDimensions(); 
+                    this.fitImageToPaper();
+                });
+                
+                bind('inpCustW', 'input', (e) => { 
+                    this.state.custW = this.clamp(parseFloat(e.target.value)||100, 10, 5000); 
+                    if(this.state.paper === 'Custom') { this.updateCanvasDimensions(); this.fitImageToPaper(); }
+                });
+                
+                bind('inpCustH', 'input', (e) => { 
+                    this.state.custH = this.clamp(parseFloat(e.target.value)||100, 10, 5000); 
+                    if(this.state.paper === 'Custom') { this.updateCanvasDimensions(); this.fitImageToPaper(); }
+                });
+
+                bind('btnOpenCrop', 'click', () => this.openCropEditor());
+                bind('btnFitPaper', 'click', () => this.fitImageToPaper());
+                bind('btnCancelCrop', 'click', () => { this.els.cropEditor.classList.remove('active'); });
+                bind('btnApplyCrop', 'click', () => this.applyCrop());
+                
+                this.els.welcome.addEventListener('click', () => this.els.file.click());
+                this.els.uploadBox.addEventListener('click', () => this.els.file.click());
+                
+                bind('fileInput', 'change', (e) => {
+                    if(e.target.files && e.target.files[0]) this.handleImageLoad(e.target.files[0], true);
+                });
+
+                window.addEventListener('dragover', (e) => { e.preventDefault(); this.els.dropOverlay.classList.add('active'); });
+                window.addEventListener('dragleave', (e) => { if(!e.relatedTarget) this.els.dropOverlay.classList.remove('active'); });
+                window.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    this.els.dropOverlay.classList.remove('active');
+                    if(e.dataTransfer && e.dataTransfer.files.length) this.handleImageLoad(e.dataTransfer.files[0], true);
+                });
+
+                const updateFilters = () => {
+                    this.state.filters.brightness = parseInt(document.getElementById('rngBright').value) || 100;
+                    this.state.filters.contrast = parseInt(document.getElementById('rngContrast').value) || 100;
+                    document.getElementById('valBright').innerText = this.state.filters.brightness + '%';
+                    document.getElementById('valContrast').innerText = this.state.filters.contrast + '%';
+                    this.requestRender();
+                };
+                
+                bind('rngBright', 'input', updateFilters);
+                bind('rngContrast', 'input', updateFilters);
+                
+                bind('togBw', 'click', () => { 
+                    this.state.filters.grayscale = !this.state.filters.grayscale; 
+                    this.updateUIState(); this.requestRender(); 
+                });
+                
+                bind('resetFilters', 'click', () => {
+                    document.getElementById('rngBright').value = 100;
+                    document.getElementById('rngContrast').value = 100;
+                    this.state.filters.grayscale = false;
+                    updateFilters(); this.updateUIState();
+                });
+
+                const updateGrid = () => {
+                    this.state.grid.size = this.clamp(parseFloat(document.getElementById('inpGridSize').value)||2, 0.5, 50);
+                    this.state.grid.thickness = this.clamp(parseFloat(document.getElementById('inpThickness').value)||1, 0.5, 10);
+                    this.state.grid.color = document.getElementById('inpColor').value;
+                    this.state.grid.opacity = this.clamp((parseFloat(document.getElementById('inpOpacity').value)||100)/100, 0, 1);
+                    
+                    const newPPI = this.clamp(parseFloat(document.getElementById('inpPPI').value)||96, 10, 500);
+                    if (newPPI !== this.state.ppi) {
+                        this.state.ppi = newPPI;
+                        this.saveGlobalSettings();
+                        this.updateCanvasDimensions(false);
+                        this.updateCalBox();
+                    }
+                    this.requestRender();
+                };
+                
+                ['inpGridSize','inpThickness','inpColor','inpOpacity','inpPPI'].forEach(id => {
+                    bind(id, 'input', updateGrid); bind(id, 'change', updateGrid);
+                });
+
+                const ppiInput = document.getElementById('inpPPI');
+                if(ppiInput) {
+                    ppiInput.addEventListener('focus', () => { this.els.calBox.style.display = 'flex'; this.updateCalBox(); });
+                    ppiInput.addEventListener('blur', () => { this.els.calBox.style.display = 'none'; });
+                }
+                
+                bind('btnAutoPPI', 'click', () => { document.getElementById('inpPPI').value = 96; updateGrid(); });
+                bind('togLabels', 'click', () => { this.state.grid.labels = !this.state.grid.labels; this.updateUIState(); this.requestRender(); });
+                bind('togDiagonals', 'click', () => { this.state.grid.diagonals = !this.state.grid.diagonals; this.updateUIState(); this.requestRender(); });
+
+                bind('btnZoomIn', 'click', () => this.applyZoom(1.2));
+                bind('btnZoomOut', 'click', () => this.applyZoom(0.8));
+                // Actual Size = 1.0 scale
+                bind('btn100', 'click', () => { this.state.scale = 1; this.centerCanvas(); });
+                bind('btnDownload', 'click', () => this.download());
+
+                window.addEventListener('resize', () => { if(this.state.img) this.centerCanvas(); });
+            }
+
+            toggleSidebar() {
+                const isMobile = window.innerWidth <= 900;
+                if (isMobile) {
+                    this.els.sidebar.classList.toggle('active');
+                    const isActive = this.els.sidebar.classList.contains('active');
+                    if (isActive) this.els.floatingBar.classList.add('hidden');
+                    else this.els.floatingBar.classList.remove('hidden');
+                } else {
+                    this.els.sidebar.classList.toggle('collapsed');
+                    const btnToggle = document.getElementById('btnToggleSidebar');
+                    if(btnToggle) btnToggle.classList.toggle('active');
+                }
+            }
+
+            updateUIState() {
+                // Syncs UI toggle buttons with internal state
+                const setIcon = (el, active, iconOn, iconOff) => {
+                    if(!el) return;
+                    el.className = active ? `ph-fill ${iconOn}` : `ph-fill ${iconOff}`;
+                    el.style.color = active ? 'var(--accent)' : '#666';
+                };
+                
+                if (this.state.filters.grayscale) {
+                    this.els.iconBw.className = 'ph-fill ph-toggle-right';
+                    this.els.iconBw.style.color = 'var(--accent)';
+                } else {
+                    this.els.iconBw.className = 'ph ph-toggle-left';
+                    this.els.iconBw.style.color = '#666';
+                }
+                
+                setIcon(this.els.iconLabels, this.state.grid.labels, 'ph-check-circle', 'ph-circle');
+                setIcon(this.els.iconDiagonals, this.state.grid.diagonals, 'ph-check-circle', 'ph-circle');
+            }
+            
+            // Sync all input fields with current state (useful when loading from history)
+            syncInputs() {
+                document.getElementById('selPaperSize').value = this.state.paper;
+                document.getElementById('rngBright').value = this.state.filters.brightness;
+                document.getElementById('valBright').innerText = this.state.filters.brightness + '%';
+                document.getElementById('rngContrast').value = this.state.filters.contrast;
+                document.getElementById('valContrast').innerText = this.state.filters.contrast + '%';
+                
+                document.getElementById('inpGridSize').value = this.state.grid.size;
+                document.getElementById('inpThickness').value = this.state.grid.thickness;
+                document.getElementById('inpColor').value = this.state.grid.color;
+                document.getElementById('inpOpacity').value = this.state.grid.opacity * 100;
+                
+                this.updateUIState();
+                
+                if(this.state.paper === 'Custom') {
+                    this.els.customRow.style.display = 'flex';
+                    this.els.inpCustW.value = this.state.custW;
+                    this.els.inpCustH.value = this.state.custH;
+                } else {
+                    this.els.customRow.style.display = 'none';
+                }
+            }
+
+            renderHistory(items) {
+                this.els.historyList.innerHTML = '';
+                if(items.length === 0) {
+                    this.els.historyList.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); padding:10px;">No recent history</div>';
+                    return;
+                }
+                
+                items.forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = 'history-item';
+                    el.innerHTML = `
+                        <img src="${item.data}" class="history-thumb">
+                        <div class="history-name">${item.name}</div>
+                        <div class="history-del"><i class="ph-bold ph-trash"></i></div>
+                    `;
+                    el.querySelector('img').onclick = () => this.loadFromHistory(item);
+                    el.querySelector('.history-del').onclick = (e) => {
+                        e.stopPropagation();
+                        if(confirm('Delete project?')) this.db.delete(item.id);
+                    };
+                    this.els.historyList.appendChild(el);
+                });
+            }
+
+            loadFromHistory(item) {
+                const img = new Image();
+                img.onload = () => {
+                    this.state.img = img;
+                    // Restore settings if available
+                    if (item.state) {
+                        // Merge saved state, but keep img object
+                        this.state = { ...this.state, ...item.state, img: img };
+                        this.syncInputs();
+                    }
+                    
+                    this.els.fileName.textContent = item.name;
+                    this.els.fileName.classList.add('active');
+                    this.els.cropImg.src = img.src;
+                    this.els.welcome.style.display = 'none';
+                    this.els.wrapper.classList.add('active');
+                    
+                    this.updateCanvasDimensions();
+                    this.centerCanvas();
+                    
+                    if(window.innerWidth <= 900) this.els.sidebar.classList.remove('active');
+                    this.requestRender();
+                };
+                img.src = item.data;
+            }
+
+            updateCalBox() {
+                const px = (50 / 25.4) * this.state.ppi;
+                this.els.calBox.style.width = px + 'px';
+                this.els.calBox.style.height = px + 'px';
+            }
+
+            updateCanvasDimensions(reCenter = true) {
+                let wMm, hMm;
+                if (this.state.paper === 'Custom') { 
+                    wMm = this.state.custW; hMm = this.state.custH; 
+                } else { 
+                    [wMm, hMm] = PAPERS[this.state.paper]; 
+                }
+                if (!this.state.isPortrait) [wMm, hMm] = [hMm, wMm];
+
+                const pxPerMm = this.state.ppi / 25.4;
+                const wPx = Math.ceil(wMm * pxPerMm);
+                const hPx = Math.ceil(hMm * pxPerMm);
+
+                this.els.cImage.width = wPx; this.els.cImage.height = hPx;
+                this.els.cGrid.width = wPx; this.els.cGrid.height = hPx;
+                this.els.wrapper.style.width = wPx + 'px';
+                this.els.wrapper.style.height = hPx + 'px';
+
+                this.requestRender();
+                if(reCenter && this.state.img) this.centerCanvas();
+            }
+
+            handleImageLoad(file, saveToDb) {
+                if (!file || !file.type.startsWith('image/')) return;
+                
+                this.els.fileName.textContent = file.name;
+                this.els.fileName.classList.add('active');
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        this.state.img = img;
+                        
+                        // Reset Grid/Crop to defaults for new image
+                        this.state.crop = { x: 0, y: 0, scale: 1 };
+                        
+                        // Save initial state to DB
+                        if(saveToDb) this.db.save(file, this.state);
+
+                        this.els.cropImg.src = img.src; 
+                        this.els.welcome.style.display = 'none';
+                        this.els.wrapper.classList.add('active');
+                        this.fitImageToPaper();
+                        this.centerCanvas();
+                        this.requestRender();
+                        this.openCropEditor(); 
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // --- CROP & FIT LOGIC ---
+            fitImageToPaper() {
+                if(!this.state.img) return;
+                const cW = this.els.cImage.width;
+                const cH = this.els.cImage.height;
+                const iW = this.state.img.width;
+                const iH = this.state.img.height;
+                const scale = Math.min(cW / iW, cH / iH);
+                const x = (cW - iW * scale) / 2;
+                const y = (cH - iH * scale) / 2;
+                this.state.crop = { x, y, scale };
+                this.requestRender();
+            }
+
+            openCropEditor() {
+                if(!this.state.img) return;
+                this.els.cropEditor.classList.add('active');
+                
+                const cW = this.els.cImage.width;
+                const cH = this.els.cImage.height;
+                const aspect = cW / cH;
+
+                const vpW = window.innerWidth;
+                const vpH = window.innerHeight - 80; 
+                
+                let boxW, boxH;
+                if (vpW / vpH > aspect) {
+                    boxH = vpH * 0.7;
+                    boxW = boxH * aspect;
+                } else {
+                    boxW = vpW * 0.7;
+                    boxH = boxW / aspect;
+                }
+                
+                this.els.cropPaperArea.style.width = boxW + 'px';
+                this.els.cropPaperArea.style.height = boxH + 'px';
+                
+                const editorScale = boxW / cW; 
+                this.editCrop = {
+                    x: this.state.crop.x * editorScale,
+                    y: this.state.crop.y * editorScale,
+                    scale: this.state.crop.scale * editorScale
+                };
+                this.updateCropVisuals();
+            }
+            
+            applyCrop() {
+                const cW = this.els.cImage.width;
+                const boxW = parseFloat(this.els.cropPaperArea.style.width);
+                const reverseScale = cW / boxW;
+
+                this.state.crop = {
+                    x: this.editCrop.x * reverseScale,
+                    y: this.editCrop.y * reverseScale,
+                    scale: this.editCrop.scale * reverseScale
+                };
+                this.els.cropEditor.classList.remove('active');
+                this.requestRender();
+            }
+
+            updateCropVisuals() {
+                this.els.cropImgContainer.style.transform = 
+                    `translate(${this.editCrop.x}px, ${this.editCrop.y}px) scale(${this.editCrop.scale})`;
+            }
+
+            onCropPointerDown(e) {
+                if(e.target.closest('button')) return;
+                this.els.cropWorkspace.setPointerCapture(e.pointerId);
+                this.cropPointers.push(e);
+                if (this.cropPointers.length === 2) {
+                    this.cropPrevDiff = this.getDist(this.cropPointers[0], this.cropPointers[1]);
+                }
+            }
+
+            onCropPointerMove(e) {
+                const index = this.cropPointers.findIndex(p => p.pointerId === e.pointerId);
+                if (index !== -1) this.cropPointers[index] = e;
+
+                if (this.cropPointers.length === 1) {
+                    this.editCrop.x += e.movementX;
+                    this.editCrop.y += e.movementY;
+                    this.updateCropVisuals();
+                } else if (this.cropPointers.length === 2) {
+                    const curDiff = this.getDist(this.cropPointers[0], this.cropPointers[1]);
+                    if (this.cropPrevDiff > 0) {
+                        const delta = curDiff - this.cropPrevDiff;
+                        const factor = 1 + (delta * 0.005);
+                        this.editCrop.scale *= factor;
+                    }
+                    this.cropPrevDiff = curDiff;
+                    this.updateCropVisuals();
+                }
+            }
+
+            onCropPointerUp(e) {
+                const index = this.cropPointers.findIndex(p => p.pointerId === e.pointerId);
+                if (index !== -1) this.cropPointers.splice(index, 1);
+                if (this.cropPointers.length < 2) this.cropPrevDiff = -1;
+            }
+
+            onCropWheel(e) {
+                e.preventDefault();
+                const scaleAmount = -e.deltaY * 0.001;
+                this.editCrop.scale *= (1 + scaleAmount);
+                this.updateCropVisuals();
+            }
+
+            // --- RENDER LOGIC ---
+            renderImage() {
+                const ctx = this.ctxImg;
+                const canvasW = this.els.cImage.width;
+                const canvasH = this.els.cImage.height;
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvasW, canvasH);
+
+                if (!this.state.img) return;
+
+                const f = this.state.filters;
+                let filterStr = `brightness(${f.brightness}%) contrast(${f.contrast}%)`;
+                if (f.grayscale) filterStr += ' grayscale(100%)';
+
+                ctx.save();
+                ctx.filter = filterStr;
+                ctx.translate(this.state.crop.x, this.state.crop.y);
+                ctx.scale(this.state.crop.scale, this.state.crop.scale);
+                ctx.drawImage(this.state.img, 0, 0);
+                ctx.restore();
+            }
+
+            drawGrid() {
+                const ctx = this.ctxGrid;
+                const w = this.els.cGrid.width;
+                const h = this.els.cGrid.height;
+                const g = this.state.grid;
+
+                ctx.clearRect(0, 0, w, h);
+                const pxPerCm = this.state.ppi / 2.54;
+                const boxSize = g.size * pxPerCm;
+
+                if (boxSize <= 0 || boxSize < 5) return;
+
+                ctx.strokeStyle = g.color;
+                ctx.lineWidth = g.thickness;
+                ctx.globalAlpha = g.opacity;
+
+                ctx.beginPath();
+                let colIdx = 0;
+                for (let x = 0; x <= w; x += boxSize) {
+                    ctx.moveTo(x, 0); ctx.lineTo(x, h); colIdx++;
+                }
+                let rowIdx = 0;
+                for (let y = 0; y <= h; y += boxSize) {
+                    ctx.moveTo(0, y); ctx.lineTo(w, y); rowIdx++;
+                }
+                ctx.stroke();
+
+                if (g.labels) {
+                    const labelOffset = Math.max(5, g.thickness + 4);
+                    colIdx = 0;
+                    for (let x = 0; x <= w; x += boxSize) {
+                        if (x < w) this.drawLabel(ctx, (colIdx + 1).toString(), x + labelOffset, labelOffset);
+                        colIdx++;
+                    }
+                    rowIdx = 0;
+                    for (let y = 0; y <= h; y += boxSize) {
+                        if (y < h) {
+                            const letter = String.fromCharCode(65 + (rowIdx % 26));
+                            const prefix = rowIdx >= 26 ? String.fromCharCode(64 + Math.floor(rowIdx/26)) : '';
+                            this.drawLabel(ctx, prefix + letter, labelOffset, y + labelOffset + 20); 
+                        }
+                        rowIdx++;
+                    }
+                }
+
+                if (g.diagonals) {
+                    ctx.beginPath();
+                    for (let x = 0; x < w; x += boxSize) {
+                        for (let y = 0; y < h; y += boxSize) {
+                            ctx.moveTo(x, y); ctx.lineTo(x + boxSize, y + boxSize);
+                            ctx.moveTo(x + boxSize, y); ctx.lineTo(x, y + boxSize);
+                        }
+                    }
+                    ctx.globalAlpha = g.opacity * 0.5;
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            drawLabel(ctx, text, x, y) {
+                const fontSize = 16;
+                ctx.font = `bold ${fontSize}px sans-serif`;
+                ctx.textBaseline = 'top';
+                // Stroke first for readability
+                ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+                ctx.lineWidth = 3;
+                ctx.strokeText(text, x, y);
+                // Then fill
+                ctx.fillStyle = this.state.grid.color;
+                ctx.fillText(text, x, y);
+            }
+
+            // --- VIEWPORT INTERACTION ---
+            onPointerDown(e) {
+                if (e.target.closest('.floating-bar') || e.target.closest('button')) return;
+                if (!this.state.img) return;
+
+                try { this.els.viewport.setPointerCapture(e.pointerId); } catch(err) {}
+                this.pointers.push(e);
+                this.els.viewport.classList.add('grabbing');
+                
+                if (this.pointers.length === 2) {
+                    this.prevDiff = this.getDist(this.pointers[0], this.pointers[1]);
+                    this.pinchCenter = this.getPinchCenter(this.pointers[0], this.pointers[1]);
+                }
+            }
+
+            onPointerMove(e) {
+                const index = this.pointers.findIndex(p => p.pointerId === e.pointerId);
+                if (index !== -1) this.pointers[index] = e;
+
+                if (this.pointers.length === 1) {
+                    this.state.panX += e.movementX;
+                    this.state.panY += e.movementY;
+                    this.applyBoundaryConstraints();
+                    this.updateTransform();
+                } else if (this.pointers.length === 2) {
+                    const curDiff = this.getDist(this.pointers[0], this.pointers[1]);
+                    const newCenter = this.getPinchCenter(this.pointers[0], this.pointers[1]);
+                    
+                    if (this.prevDiff > 0) {
+                        const delta = curDiff - this.prevDiff;
+                        const factor = 1 + (delta * 0.005);
+                        let newScale = this.clamp(this.state.scale * factor, 0.05, 10);
+                        
+                        const rect = this.els.viewport.getBoundingClientRect();
+                        const focusX = newCenter.x - rect.left;
+                        const focusY = newCenter.y - rect.top;
+                        
+                        this.state.panX = focusX - (focusX - this.state.panX) * (newScale / this.state.scale);
+                        this.state.panY = focusY - (focusY - this.state.panY) * (newScale / this.state.scale);
+                        this.state.scale = newScale;
+                        this.applyBoundaryConstraints();
+                        this.updateTransform();
+                    }
+                    this.prevDiff = curDiff;
+                    this.pinchCenter = newCenter;
+                }
+            }
+
+            onPointerUp(e) {
+                const index = this.pointers.findIndex(p => p.pointerId === e.pointerId);
+                if (index !== -1) this.pointers.splice(index, 1);
+                if (this.pointers.length < 2) this.prevDiff = -1;
+                if (this.pointers.length === 0) this.els.viewport.classList.remove('grabbing');
+            }
+
+            getDist(p1, p2) { 
+                return Math.sqrt(Math.pow(p2.clientX - p1.clientX, 2) + Math.pow(p2.clientY - p1.clientY, 2)); 
+            }
+            getPinchCenter(p1, p2) { 
+                return { x: (p1.clientX + p2.clientX) / 2, y: (p1.clientY + p2.clientY) / 2 }; 
+            }
+
+            onWheel(e) {
+                if (!this.state.img) return;
+                e.preventDefault();
+                const rect = this.els.viewport.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                
+                const scaleAmount = -e.deltaY * 0.001;
+                const newScale = this.clamp(this.state.scale * (1 + scaleAmount), 0.05, 10);
+                
+                this.state.panX = mouseX - (mouseX - this.state.panX) * (newScale / this.state.scale);
+                this.state.panY = mouseY - (mouseY - this.state.panY) * (newScale / this.state.scale);
+                this.state.scale = newScale;
+                
+                this.applyBoundaryConstraints();
+                this.updateTransform();
+            }
+
+            applyZoom(factor) {
+                if (!this.state.img) return;
+                let newScale = this.clamp(this.state.scale * factor, 0.05, 10);
+                const rect = this.els.viewport.getBoundingClientRect();
+                const cx = rect.width / 2; const cy = rect.height / 2;
+                this.state.panX = cx - (cx - this.state.panX) * (newScale / this.state.scale);
+                this.state.panY = cy - (cy - this.state.panY) * (newScale / this.state.scale);
+                this.state.scale = newScale;
+                this.applyBoundaryConstraints();
+                this.updateTransform();
+            }
+
+            applyBoundaryConstraints() {
+                const vW = this.els.viewport.clientWidth;
+                const vH = this.els.viewport.clientHeight;
+                const iW = this.els.cImage.width * this.state.scale;
+                const iH = this.els.cImage.height * this.state.scale;
+                const margin = 100;
+                
+                if (this.state.panX > vW - margin) this.state.panX = vW - margin;
+                if (this.state.panX < -iW + margin) this.state.panX = -iW + margin;
+                if (this.state.panY > vH - margin) this.state.panY = vH - margin;
+                if (this.state.panY < -iH + margin) this.state.panY = -iH + margin;
+            }
+
+            updateTransform() {
+                this.els.wrapper.style.transform = `translate(${this.state.panX}px, ${this.state.panY}px) scale(${this.state.scale})`;
+                this.els.zoomVal.innerText = Math.round(this.state.scale * 100) + '%';
+            }
+
+            centerCanvas() {
+                const vW = this.els.viewport.clientWidth;
+                const vH = this.els.viewport.clientHeight;
+                const iW = this.els.cImage.width * this.state.scale;
+                const iH = this.els.cImage.height * this.state.scale;
+                this.state.panX = (vW - iW) / 2;
+                this.state.panY = (vH - iH) / 2;
+                this.updateTransform();
+            }
+
+            download() {
+                if (!this.state.img) return;
+                this.renderImage();
+                this.drawGrid();
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = this.els.cImage.width;
+                    canvas.height = this.els.cImage.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(this.els.cImage, 0, 0);
+                    ctx.drawImage(this.els.cGrid, 0, 0);
+                    const link = document.createElement('a');
+                    link.download = `Grid-Ref-${Date.now()}.jpg`;
+                    link.href = canvas.toDataURL('image/jpeg', 0.95);
+                    link.click();
+                } catch(e) { alert('Download failed. Try again.'); }
+            }
+        }
+
+        let app = new ArtistGridApp();
+    </script>
+</body>
+</html>
